@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Phytochrome and photoperiod</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg: #F4F7F1;
+  --surface: #FFFFFF;
+  --ink: #1B2A20;
+  --muted: #56675C;
+  --grid: #DCE3DA;
+  --sun: #F2C14E;
+  --sun-ink: #3E3104;
+  --night: #22305A;
+  --night-ink: #E6EAF5;
+  --night-shade: rgba(34, 48, 90, 0.07);
+  --pr: #C8243A;
+  --pfr: #6A2C91;
+  --leaf: #3E7C3A;
+  --petal: #C2408A;
+  --threshold: #8A7A3A;
+  color-scheme: light;
+  box-sizing: border-box;
+  padding-top: env(safe-area-inset-top, 0px);
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #10161A; --surface: #182127; --ink: #E8EEE9; --muted: #A0B0A6; --grid: #2C3A40;
+    --sun: #E8B84A; --sun-ink: #2A2103; --night: #31437E; --night-ink: #E6EAF5;
+    --night-shade: rgba(120, 140, 210, 0.08);
+    --pr: #FF5F72; --pfr: #C08EE6; --leaf: #6DB765; --petal: #E672B4; --threshold: #CBB86A;
+    color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #10161A; --surface: #182127; --ink: #E8EEE9; --muted: #A0B0A6; --grid: #2C3A40;
+  --sun: #E8B84A; --sun-ink: #2A2103; --night: #31437E; --night-ink: #E6EAF5;
+  --night-shade: rgba(120, 140, 210, 0.08);
+  --pr: #FF5F72; --pfr: #C08EE6; --leaf: #6DB765; --petal: #E672B4; --threshold: #CBB86A;
+  color-scheme: dark;
+}
+*, *::before, *::after { box-sizing: inherit; }
+html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: "Atkinson Hyperlegible", "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-size: 1.05rem;
+  line-height: 1.45;
+}
+main { max-width: 1240px; margin: 0 auto; padding: 1.5rem 1.25rem 2.5rem; }
+header {
+  display: flex; flex-wrap: wrap; align-items: end; justify-content: space-between;
+  gap: 1rem 2rem; margin-bottom: 1.25rem;
+}
+h1 { font-size: clamp(1.6rem, 3.2vw, 2.3rem); line-height: 1.1; margin: 0 0 .35rem; }
+.lede { margin: 0; color: var(--muted); max-width: 62ch; }
+.lede b.pr { color: var(--pr); }
+.lede b.pfr { color: var(--pfr); }
+.controls { display: flex; gap: .5rem; }
+button {
+  font: inherit; font-weight: 700; font-size: .95rem;
+  padding: .5rem 1rem; border-radius: 999px; cursor: pointer;
+  border: 2px solid var(--ink); background: var(--surface); color: var(--ink);
+}
+button.primary { background: var(--ink); color: var(--bg); }
+button:focus-visible { outline: 3px solid var(--pfr); outline-offset: 3px; }
+
+.panels { display: grid; grid-template-columns: 1fr; gap: 1.25rem; }
+@media (min-width: 900px) { .panels { grid-template-columns: 1fr 1fr; } }
+.panel {
+  background: var(--surface); border-radius: 14px; padding: 1rem 1rem 1.1rem;
+  border: 1px solid var(--grid);
+}
+.panel h2 { margin: 0; font-size: 1.35rem; }
+.panel .sub { margin: 0 0 .4rem; color: var(--muted); }
+.panel svg.chart { width: 100%; height: auto; display: block; }
+
+svg text { font-family: inherit; fill: var(--ink); }
+.t-small { font-size: 13px; }
+.t-axis { font-size: 13px; fill: var(--muted); }
+.t-bar { font-size: 15px; font-weight: 700; }
+.t-line { font-size: 16px; font-weight: 700; }
+.gridline { stroke: var(--grid); stroke-width: 1; }
+.axis { stroke: var(--muted); stroke-width: 1.5; }
+.sunfill { fill: var(--sun); }
+.nightfill { fill: var(--night); }
+.sun-ink { fill: var(--sun-ink); }
+.night-ink { fill: var(--night-ink); }
+.nightshade { fill: var(--night-shade); }
+.bracket { stroke: var(--ink); stroke-width: 2; fill: none; }
+.critline { stroke: var(--ink); stroke-width: 1.5; stroke-dasharray: 3 4; opacity: .6; }
+.thresh { stroke: var(--threshold); stroke-width: 1.5; stroke-dasharray: 2 4; }
+.thresh-label { fill: var(--threshold); font-size: 12px; }
+.line-pr { stroke: var(--pr); stroke-width: 4; fill: none; stroke-linejoin: round; stroke-linecap: round; }
+.line-pfr { stroke: var(--pfr); stroke-width: 4; fill: none; stroke-dasharray: 9 6; stroke-linejoin: round; }
+.lbl-pr { fill: var(--pr); }
+.lbl-pfr { fill: var(--pfr); }
+.playhead { stroke: var(--ink); stroke-width: 1.5; opacity: .45; }
+.knob { stroke: var(--surface); stroke-width: 3; }
+
+.status { margin: .35rem 0 .2rem; min-height: 1.5em; font-weight: 700; text-align: center; }
+.plants { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; margin-top: .35rem; }
+.plant-card { text-align: center; }
+.plant-card svg { width: 84px; height: 112px; display: block; margin: 0 auto; }
+.plant-name { margin: .1rem 0 0; font-weight: 700; }
+.outcome { margin: 0; min-height: 1.45em; color: var(--muted); }
+.plant-card.bloom .outcome { color: var(--ink); font-weight: 700; }
+.stem { stroke: var(--leaf); stroke-width: 4; stroke-linecap: round; fill: none; }
+.leafp { fill: var(--leaf); }
+.bud { fill: var(--leaf); }
+.flower { opacity: 0; transform: scale(.2); transform-box: fill-box; transform-origin: center;
+  transition: opacity .6s ease, transform .6s cubic-bezier(.3,1.5,.5,1); }
+.petal { fill: var(--petal); }
+.centre { fill: var(--sun); }
+.plant-card.bloom .flower { opacity: 1; transform: scale(1); }
+.plant-card.bloom .bud { opacity: 0; }
+@media (prefers-reduced-motion: reduce) { .flower { transition: none; } }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <div>
+      <h1>Phytochrome and photoperiod</h1>
+      <p class="lede">In daylight, <b class="pr">Pr</b> quickly changes to <b class="pfr">Pfr</b>. In the dark, <b class="pfr">Pfr</b> slowly changes back to <b class="pr">Pr</b>.</p>
+    </div>
+    <div class="controls">
+      <button id="playBtn" class="primary" aria-pressed="true">Pause</button>
+      <button id="restartBtn">Restart</button>
+    </div>
+  </header>
+  <div class="panels" id="panels"></div>
+</main>
+
+<script>
+(() => {
+  "use strict";
+
+  // ---- Model settings -------------------------------------------------
+  // Pfr is a fraction of total phytochrome; Pr = 1 - Pfr.
+  const CFG = {
+    kLight: 1.6,      // per hour: Pr -> Pfr in daylight
+    pfrSun: 0.85,     // Pfr level reached in daylight
+    kDark: 0.15,      // per hour: slow dark reversion Pfr -> Pr
+    critical: 12,     // critical night length (hours)
+    hoursPerSec: 2,   // animation speed
+    holdSec: 3,       // pause on the result before looping
+    dt: 0.02          // simulation step (hours)
+  };
+  // Light flashes for a later night-break version.
+  // Add to a panel's flashes, e.g. { t: 16, type: "red" } or { t: 16.3, type: "farred" }.
+  const FLASH = {
+    red:    { target: 0.90, k: 30, dur: 0.25 },
+    farred: { target: 0.03, k: 30, dur: 0.25 }
+  };
+
+  const PANELS = [
+    { id: "sd", title: "Short day", light: 8,  flashes: [] },
+    { id: "ld", title: "Long day",  light: 16, flashes: [] }
+  ];
+
+  const N = Math.round(24 / CFG.dt);
+
+  function lightAt(p, t) {
+    for (const f of p.flashes) {
+      const dur = f.dur ?? FLASH[f.type].dur;
+      if (t >= f.t && t < f.t + dur) return f.type;
+    }
+    return t < p.light ? "sun" : "dark";
+  }
+
+  function step(pfr, light) {
+    let d;
+    if (light === "sun") d = CFG.kLight * (CFG.pfrSun - pfr);
+    else if (light === "dark") d = -CFG.kDark * pfr;
+    else d = FLASH[light].k * (FLASH[light].target - pfr);
+    return pfr + d * CFG.dt;
+  }
+
+  // Pfr left after exactly the critical night length of uninterrupted dark.
+  let THRESH = CFG.pfrSun;
+  for (let i = 0; i < Math.round(CFG.critical / CFG.dt); i++) THRESH = step(THRESH, "dark");
+
+  function simulate(p) {
+    let pfr = 0.5, series = [];
+    for (let cycle = 0; cycle < 6; cycle++) {   // run to a repeating daily pattern
+      series = [];
+      for (let i = 0; i <= N; i++) {
+        series.push(pfr);
+        if (i < N) pfr = step(pfr, lightAt(p, i * CFG.dt));
+      }
+    }
+    p.series = series;
+    let min = 1;
+    for (let i = Math.round(p.light / CFG.dt); i <= N; i++) min = Math.min(min, series[i]);
+    // Short-day plants flower if Pfr falls low enough during the night;
+    // long-day plants flower if it stays high enough.
+    p.sdpFlowers = min < THRESH;
+    p.ldpFlowers = !p.sdpFlowers;
+  }
+
+  // ---- Drawing -------------------------------------------------------
+  const NS = "http://www.w3.org/2000/svg";
+  const X0 = 58, X1 = 580, BAR_Y = 26, BAR_H = 32, G_TOP = 118, G_BOT = 300;
+  const xs = t => X0 + (t / 24) * (X1 - X0);
+  const ys = v => G_BOT - v * (G_BOT - G_TOP);
+
+  function el(tag, attrs, parent, text) {
+    const e = document.createElementNS(NS, tag);
+    for (const k in attrs) e.setAttribute(k, attrs[k]);
+    if (text != null) e.textContent = text;
+    if (parent) parent.appendChild(e);
+    return e;
+  }
+
+  const plantSVG = `
+    <svg viewBox="0 0 80 110" aria-hidden="true">
+      <path class="stem" d="M40 106 V38"/>
+      <path class="leafp" d="M40 84 C26 80 16 68 18 58 C30 60 39 70 40 84Z"/>
+      <path class="leafp" d="M40 70 C54 66 64 54 62 44 C50 46 41 56 40 70Z"/>
+      <circle class="bud" cx="40" cy="36" r="5"/>
+      <g class="flower">
+        ${[0,72,144,216,288].map(a => `<ellipse class="petal" cx="40" cy="20" rx="7" ry="11" transform="rotate(${a} 40 31)"/>`).join("")}
+        <circle class="centre" cx="40" cy="31" r="6"/>
+      </g>
+    </svg>`;
+
+  function buildPanel(p) {
+    const dark = 24 - p.light;
+    const sec = document.createElement("section");
+    sec.className = "panel";
+    sec.innerHTML = `
+      <h2>${p.title}</h2>
+      <p class="sub">${p.light} h light, ${dark} h dark</p>
+      <svg class="chart" viewBox="0 0 600 345" role="img"
+        aria-label="${p.title}: Pr and Pfr levels over 24 hours with ${p.light} hours of light and ${dark} hours of dark"></svg>
+      <p class="status" aria-live="polite"></p>
+      <div class="plants">
+        <div class="plant-card" data-kind="sdp">${plantSVG}<p class="plant-name">Short-day plant</p><p class="outcome"></p></div>
+        <div class="plant-card" data-kind="ldp">${plantSVG}<p class="plant-name">Long-day plant</p><p class="outcome"></p></div>
+      </div>`;
+    document.getElementById("panels").appendChild(sec);
+    const svg = sec.querySelector("svg.chart");
+
+    const dusk = p.light;
+    // Night shading and grid
+    el("rect", { x: xs(dusk), y: G_TOP, width: xs(24) - xs(dusk), height: G_BOT - G_TOP, class: "nightshade" }, svg);
+    for (let h = 0; h <= 24; h += 4) {
+      el("line", { x1: xs(h), x2: xs(h), y1: G_TOP, y2: G_BOT, class: "gridline" }, svg);
+      el("text", { x: xs(h), y: G_BOT + 18, "text-anchor": "middle", class: "t-axis" }, svg, h);
+    }
+    el("text", { x: (X0 + X1) / 2, y: G_BOT + 38, "text-anchor": "middle", class: "t-axis" }, svg, "Hours after sunrise");
+    el("text", { x: X0 - 8, y: G_TOP + 5, "text-anchor": "end", class: "t-axis" }, svg, "High");
+    el("text", { x: X0 - 8, y: G_BOT, "text-anchor": "end", class: "t-axis" }, svg, "Low");
+    el("line", { x1: X0, x2: X0, y1: G_TOP, y2: G_BOT, class: "axis" }, svg);
+    el("line", { x1: X0, x2: X1, y1: G_BOT, y2: G_BOT, class: "axis" }, svg);
+
+    // Day / night bar
+    el("rect", { x: xs(0), y: BAR_Y, width: xs(dusk) - xs(0), height: BAR_H, rx: 6, class: "sunfill" }, svg);
+    el("rect", { x: xs(dusk), y: BAR_Y, width: xs(24) - xs(dusk), height: BAR_H, rx: 6, class: "nightfill" }, svg);
+    el("text", { x: (xs(0) + xs(dusk)) / 2, y: BAR_Y + 21, "text-anchor": "middle", class: "t-bar sun-ink" }, svg, `Light ${p.light} h`);
+    el("text", { x: (xs(dusk) + xs(24)) / 2, y: BAR_Y + 21, "text-anchor": "middle", class: "t-bar night-ink" }, svg, `Dark ${dark} h`);
+
+    // Critical night length bracket, measured from sunset
+    const critEnd = dusk + CFG.critical;
+    const bx1 = xs(dusk), bx2 = xs(Math.min(critEnd, 24)), by = 74;
+    el("path", { d: `M${bx1} ${by - 7} V${by} H${bx2}` + (critEnd <= 24 ? ` V${by - 7}` : ""), class: "bracket" }, svg);
+    if (critEnd > 24) {
+      el("path", { d: `M${bx2 - 9} ${by - 6} L${bx2 + 1} ${by} L${bx2 - 9} ${by + 6}`, class: "bracket" }, svg);
+    }
+    el("text", { x: (bx1 + bx2) / 2, y: by + 20, "text-anchor": "middle", class: "t-small" }, svg,
+      `Critical night length ${CFG.critical} h` + (critEnd > 24 ? " (longer than this night)" : ""));
+    if (critEnd <= 24) {
+      el("line", { x1: xs(critEnd), x2: xs(critEnd), y1: by, y2: G_BOT, class: "critline" }, svg);
+    }
+
+    // Pfr threshold
+    el("line", { x1: X0, x2: X1, y1: ys(THRESH), y2: ys(THRESH), class: "thresh" }, svg);
+    el("text", { x: X0 + 6, y: ys(THRESH) - 6, class: "thresh-label" }, svg, "Pfr threshold");
+
+    // Lines, labels, playhead
+    p.prPath = el("path", { class: "line-pr" }, svg);
+    p.pfrPath = el("path", { class: "line-pfr" }, svg);
+    p.prLbl = el("text", { class: "t-line lbl-pr" }, svg, "Pr");
+    p.pfrLbl = el("text", { class: "t-line lbl-pfr" }, svg, "Pfr");
+    p.playhead = el("line", { y1: BAR_Y - 4, y2: G_BOT, class: "playhead" }, svg);
+    p.knob = el("circle", { cy: BAR_Y + BAR_H / 2, r: 10, class: "knob" }, svg);
+
+    p.status = sec.querySelector(".status");
+    p.cards = { sdp: sec.querySelector('[data-kind="sdp"]'), ldp: sec.querySelector('[data-kind="ldp"]') };
+  }
+
+  function render(p, t, showResult) {
+    const idx = Math.min(N, Math.round(t / CFG.dt));
+    let dPr = "", dPfr = "";
+    for (let i = 0; i <= idx; i++) {
+      const x = xs(i * CFG.dt).toFixed(1), v = p.series[i];
+      const c = i === 0 ? "M" : "L";
+      dPr += `${c}${x} ${ys(1 - v).toFixed(1)}`;
+      dPfr += `${c}${x} ${ys(v).toFixed(1)}`;
+    }
+    p.prPath.setAttribute("d", dPr);
+    p.pfrPath.setAttribute("d", dPfr);
+
+    const hx = xs(idx * CFG.dt), v = p.series[idx];
+    let yPr = ys(1 - v), yPfr = ys(v);
+    if (Math.abs(yPr - yPfr) < 18) {           // keep labels apart where the lines cross
+      const mid = (yPr + yPfr) / 2, s = yPr < yPfr ? -1 : 1;
+      yPr = mid + s * 9; yPfr = mid - s * 9;
+    }
+    const lx = Math.min(hx + 8, X1 - 30);
+    p.prLbl.setAttribute("x", lx); p.prLbl.setAttribute("y", yPr + 5);
+    p.pfrLbl.setAttribute("x", lx); p.pfrLbl.setAttribute("y", yPfr + 5);
+
+    p.playhead.setAttribute("x1", hx); p.playhead.setAttribute("x2", hx);
+    p.knob.setAttribute("cx", hx);
+    const lightNow = lightAt(p, Math.min(t, 23.99));
+    p.knob.style.fill = lightNow === "sun" ? "var(--sun)" : lightNow === "dark" ? "var(--night-ink)" : lightNow === "red" ? "var(--pr)" : "var(--pfr)";
+
+    const night = 24 - p.light;
+    if (showResult) {
+      p.status.textContent = night > CFG.critical
+        ? `${night} h night is longer than the critical night length`
+        : `${night} h night is shorter than the critical night length`;
+    } else if (t < p.light) {
+      p.status.textContent = "Daytime";
+    } else {
+      p.status.textContent = `Dark so far: ${(t - p.light).toFixed(1)} h`;
+    }
+
+    for (const kind of ["sdp", "ldp"]) {
+      const card = p.cards[kind], flowers = kind === "sdp" ? p.sdpFlowers : p.ldpFlowers;
+      card.classList.toggle("bloom", showResult && flowers);
+      card.querySelector(".outcome").textContent = showResult ? (flowers ? "Flowers" : "Does not flower") : "";
+    }
+  }
+
+  // ---- Animation loop -------------------------------------------------
+  PANELS.forEach(p => { simulate(p); buildPanel(p); });
+
+  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let t = 0, holding = 0, playing = !reduce, last = null;
+  const playBtn = document.getElementById("playBtn");
+
+  function drawAll() {
+    const done = t >= 24;
+    PANELS.forEach(p => render(p, Math.min(t, 24), done));
+  }
+  function setPlaying(on) {
+    playing = on;
+    playBtn.textContent = on ? "Pause" : "Play";
+    playBtn.setAttribute("aria-pressed", String(on));
+    last = null;
+  }
+  function frame(ts) {
+    if (playing) {
+      if (last != null) {
+        const dt = Math.min(0.1, (ts - last) / 1000);
+        if (t < 24) {
+          t = Math.min(24, t + dt * CFG.hoursPerSec);
+        } else {
+          holding += dt;
+          if (holding >= CFG.holdSec) { t = 0; holding = 0; }
+        }
+        drawAll();
+      }
+      last = ts;
+    }
+    requestAnimationFrame(frame);
+  }
+
+  playBtn.addEventListener("click", () => setPlaying(!playing));
+  document.getElementById("restartBtn").addEventListener("click", () => {
+    t = 0; holding = 0; drawAll(); setPlaying(true);
+  });
+  document.addEventListener("keydown", e => {
+    if (e.code === "Space" && e.target === document.body) { e.preventDefault(); setPlaying(!playing); }
+  });
+
+  if (reduce) { t = 24; setPlaying(false); }
+  drawAll();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
