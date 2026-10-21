@@ -24,6 +24,8 @@
   --leaf: #3E7C3A;
   --petal: #C2408A;
   --threshold: #8A7A3A;
+  --redlight: #D7263D;
+  --farred: #6E0F2E;
   color-scheme: light;
   box-sizing: border-box;
   padding-top: env(safe-area-inset-top, 0px);
@@ -35,6 +37,7 @@
     --sun: #E8B84A; --sun-ink: #2A2103; --night: #31437E; --night-ink: #E6EAF5;
     --night-shade: rgba(120, 140, 210, 0.08);
     --pr: #FF5F72; --pfr: #C08EE6; --leaf: #6DB765; --petal: #E672B4; --threshold: #CBB86A;
+    --redlight: #D7263D; --farred: #A8345A;
     color-scheme: dark;
   }
 }
@@ -43,6 +46,7 @@
   --sun: #E8B84A; --sun-ink: #2A2103; --night: #31437E; --night-ink: #E6EAF5;
   --night-shade: rgba(120, 140, 210, 0.08);
   --pr: #FF5F72; --pfr: #C08EE6; --leaf: #6DB765; --petal: #E672B4; --threshold: #CBB86A;
+  --redlight: #D7263D; --farred: #A8345A;
   color-scheme: dark;
 }
 *, *::before, *::after { box-sizing: inherit; }
@@ -105,6 +109,16 @@ svg text { font-family: inherit; fill: var(--ink); }
 .lbl-pfr { fill: var(--pfr); }
 .playhead { stroke: var(--ink); stroke-width: 1.5; opacity: .45; }
 .knob { stroke: var(--surface); stroke-width: 3; }
+.flash-mark-red { fill: var(--redlight); }
+.flash-mark-farred { fill: var(--farred); }
+.flash-tag { font-size: 12px; font-weight: 700; }
+.wash { opacity: 0; pointer-events: none; }
+.wash.go { animation: wash .7s ease-out; }
+@keyframes wash { from { opacity: .35; } to { opacity: 0; } }
+.flash-controls { display: flex; flex-wrap: wrap; gap: .5rem; justify-content: center; margin: .6rem 0 .2rem; }
+button.red { border-color: var(--redlight); background: var(--redlight); color: #fff; }
+button.farred { border-color: var(--farred); background: var(--farred); color: #fff; }
+button:disabled { opacity: .45; cursor: not-allowed; }
 
 .status { margin: .35rem 0 .2rem; min-height: 1.5em; font-weight: 700; text-align: center; }
 .plants { display: grid; grid-template-columns: 1fr 1fr; gap: .75rem; margin-top: .35rem; }
@@ -130,7 +144,7 @@ svg text { font-family: inherit; fill: var(--ink); }
   <header>
     <div>
       <h1>Phytochrome and photoperiod</h1>
-      <p class="lede">In daylight, <b class="pr">Pr</b> quickly changes to <b class="pfr">Pfr</b>. In the dark, <b class="pfr">Pfr</b> slowly changes back to <b class="pr">Pr</b>.</p>
+      <p class="lede">In daylight, <b class="pr">Pr</b> quickly changes to <b class="pfr">Pfr</b>. In the dark, <b class="pfr">Pfr</b> slowly changes back to <b class="pr">Pr</b>. Flash red or far-red light during the night and watch what happens.</p>
     </div>
     <div class="controls">
       <button id="playBtn" class="primary" aria-pressed="true">Pause</button>
@@ -155,8 +169,7 @@ svg text { font-family: inherit; fill: var(--ink); }
     holdSec: 3,       // pause on the result before looping
     dt: 0.02          // simulation step (hours)
   };
-  // Light flashes for a later night-break version.
-  // Add to a panel's flashes, e.g. { t: 16, type: "red" } or { t: 16.3, type: "farred" }.
+  // Light flashes: red drives Pr -> Pfr, far-red drives Pfr -> Pr.
   const FLASH = {
     red:    { target: 0.90, k: 30, dur: 0.25 },
     farred: { target: 0.03, k: 30, dur: 0.25 }
@@ -170,11 +183,11 @@ svg text { font-family: inherit; fill: var(--ink); }
   const N = Math.round(24 / CFG.dt);
 
   function lightAt(p, t) {
+    let hit = null;   // if flashes overlap, the most recent one wins
     for (const f of p.flashes) {
-      const dur = f.dur ?? FLASH[f.type].dur;
-      if (t >= f.t && t < f.t + dur) return f.type;
+      if (t >= f.t && t < f.t + FLASH[f.type].dur && (!hit || f.t >= hit.t)) hit = f;
     }
-    return t < p.light ? "sun" : "dark";
+    return hit ? hit.type : (t < p.light ? "sun" : "dark");
   }
 
   function step(pfr, light) {
@@ -199,12 +212,20 @@ svg text { font-family: inherit; fill: var(--ink); }
       }
     }
     p.series = series;
-    let min = 1;
-    for (let i = Math.round(p.light / CFG.dt); i <= N; i++) min = Math.min(min, series[i]);
-    // Short-day plants flower if Pfr falls low enough during the night;
-    // long-day plants flower if it stays high enough.
-    p.sdpFlowers = min < THRESH;
+    evaluate(p);
+  }
+
+  // Short-day plants flower if Pfr is below the threshold by the end of the night;
+  // long-day plants flower if it is still above it. The last flash wins.
+  function evaluate(p) {
+    p.sdpFlowers = p.series[N] < THRESH;
     p.ldpFlowers = !p.sdpFlowers;
+  }
+
+  // Recalculate from a point onward, after a flash is added or cleared.
+  function resimFrom(p, idx) {
+    for (let i = idx; i < N; i++) p.series[i + 1] = step(p.series[i], lightAt(p, i * CFG.dt));
+    evaluate(p);
   }
 
   // ---- Drawing -------------------------------------------------------
@@ -242,6 +263,11 @@ svg text { font-family: inherit; fill: var(--ink); }
       <p class="sub">${p.light} h light, ${dark} h dark</p>
       <svg class="chart" viewBox="0 0 600 345" role="img"
         aria-label="${p.title}: Pr and Pfr levels over 24 hours with ${p.light} hours of light and ${dark} hours of dark"></svg>
+      <div class="flash-controls">
+        <button class="red" data-flash="red">Red flash</button>
+        <button class="farred" data-flash="farred">Far-red flash</button>
+        <button data-clear>Clear flashes</button>
+      </div>
       <p class="status" aria-live="polite"></p>
       <div class="plants">
         <div class="plant-card" data-kind="sdp">${plantSVG}<p class="plant-name">Short-day plant</p><p class="outcome"></p></div>
@@ -286,6 +312,9 @@ svg text { font-family: inherit; fill: var(--ink); }
     el("line", { x1: X0, x2: X1, y1: ys(THRESH), y2: ys(THRESH), class: "thresh" }, svg);
     el("text", { x: X0 + 6, y: ys(THRESH) - 6, class: "thresh-label" }, svg, "Pfr threshold");
 
+    // Flash markers sit behind the lines
+    p.flashLayer = el("g", {}, svg);
+
     // Lines, labels, playhead
     p.prPath = el("path", { class: "line-pr" }, svg);
     p.pfrPath = el("path", { class: "line-pfr" }, svg);
@@ -293,8 +322,11 @@ svg text { font-family: inherit; fill: var(--ink); }
     p.pfrLbl = el("text", { class: "t-line lbl-pfr" }, svg, "Pfr");
     p.playhead = el("line", { y1: BAR_Y - 4, y2: G_BOT, class: "playhead" }, svg);
     p.knob = el("circle", { cy: BAR_Y + BAR_H / 2, r: 10, class: "knob" }, svg);
+    p.wash = el("rect", { x: 0, y: 0, width: 600, height: 345, rx: 10, class: "wash" }, svg);
 
     p.status = sec.querySelector(".status");
+    p.flashBtns = sec.querySelectorAll("[data-flash]");
+    p.clearBtn = sec.querySelector("[data-clear]");
     p.cards = { sdp: sec.querySelector('[data-kind="sdp"]'), ldp: sec.querySelector('[data-kind="ldp"]') };
   }
 
@@ -323,15 +355,29 @@ svg text { font-family: inherit; fill: var(--ink); }
     p.playhead.setAttribute("x1", hx); p.playhead.setAttribute("x2", hx);
     p.knob.setAttribute("cx", hx);
     const lightNow = lightAt(p, Math.min(t, 23.99));
-    p.knob.style.fill = lightNow === "sun" ? "var(--sun)" : lightNow === "dark" ? "var(--night-ink)" : lightNow === "red" ? "var(--pr)" : "var(--pfr)";
+    p.knob.style.fill = lightNow === "sun" ? "var(--sun)" : lightNow === "dark" ? "var(--night-ink)" : lightNow === "red" ? "var(--redlight)" : "var(--farred)";
 
     const night = 24 - p.light;
+    const nightFlashes = p.flashes.filter(f => f.t >= p.light);
+    const pastFlashes = nightFlashes.filter(f => f.t <= t);
     if (showResult) {
-      p.status.textContent = night > CFG.critical
-        ? `${night} h night is longer than the critical night length`
-        : `${night} h night is shorter than the critical night length`;
+      if (nightFlashes.length) {
+        p.status.textContent = p.sdpFlowers
+          ? "Pfr was below the threshold by sunrise"
+          : "Pfr was still above the threshold at sunrise";
+      } else {
+        p.status.textContent = night > CFG.critical
+          ? `${night} h night is longer than the critical night length`
+          : `${night} h night is shorter than the critical night length`;
+      }
+    } else if (lightNow === "red" || lightNow === "farred") {
+      p.status.textContent = lightNow === "red" ? "Red flash" : "Far-red flash";
     } else if (t < p.light) {
       p.status.textContent = "Daytime";
+    } else if (pastFlashes.length) {
+      const lf = pastFlashes[pastFlashes.length - 1];
+      const end = lf.t + FLASH[lf.type].dur;
+      p.status.textContent = `Dark since last flash: ${Math.max(0, t - end).toFixed(1)} h`;
     } else {
       p.status.textContent = `Dark so far: ${(t - p.light).toFixed(1)} h`;
     }
@@ -344,16 +390,63 @@ svg text { font-family: inherit; fill: var(--ink); }
   }
 
   // ---- Animation loop -------------------------------------------------
-  PANELS.forEach(p => { simulate(p); buildPanel(p); });
-
   const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const MAX_FLASHES = 12;
+
+  function drawFlashes(p) {
+    p.flashLayer.replaceChildren();
+    for (const f of p.flashes) {
+      const cls = f.type === "red" ? "flash-mark-red" : "flash-mark-farred";
+      const w = Math.max(4, xs(FLASH[f.type].dur) - xs(0));
+      el("rect", { x: xs(f.t) - 1, y: BAR_Y - 2, width: w, height: G_BOT - BAR_Y + 2, class: cls, opacity: 0.55 }, p.flashLayer);
+      el("text", { x: xs(f.t) + w / 2 - 1, y: 16, "text-anchor": "middle", class: "flash-tag " + cls }, p.flashLayer, f.type === "red" ? "R" : "FR");
+    }
+    p.clearBtn.disabled = p.flashes.length === 0;
+  }
+
+  function wash(p, type) {
+    if (reduce) return;
+    p.wash.style.fill = type === "red" ? "var(--redlight)" : "var(--farred)";
+    p.wash.classList.remove("go");
+    p.wash.getBoundingClientRect();
+    p.wash.classList.add("go");
+  }
+
+  PANELS.forEach(p => { simulate(p); buildPanel(p); drawFlashes(p); });
+
   let t = 0, holding = 0, playing = !reduce, last = null;
   const playBtn = document.getElementById("playBtn");
 
   function drawAll() {
     const done = t >= 24;
-    PANELS.forEach(p => render(p, Math.min(t, 24), done));
+    PANELS.forEach(p => {
+      render(p, Math.min(t, 24), done);
+      p.flashBtns.forEach(b => { b.disabled = done || p.flashes.length >= MAX_FLASHES; });
+    });
   }
+
+  function addFlash(p, type) {
+    if (t >= 24 || p.flashes.length >= MAX_FLASHES) return;
+    const idx = Math.round(t / CFG.dt);
+    p.flashes.push({ t: idx * CFG.dt, type });
+    p.flashes.sort((a, b) => a.t - b.t);
+    resimFrom(p, idx);
+    drawFlashes(p);
+    wash(p, type);
+    drawAll();
+  }
+
+  function clearFlashes(p) {
+    p.flashes = [];
+    resimFrom(p, Math.min(N, Math.round(t / CFG.dt)));
+    drawFlashes(p);
+    drawAll();
+  }
+
+  PANELS.forEach(p => {
+    p.flashBtns.forEach(b => b.addEventListener("click", () => addFlash(p, b.dataset.flash)));
+    p.clearBtn.addEventListener("click", () => clearFlashes(p));
+  });
   function setPlaying(on) {
     playing = on;
     playBtn.textContent = on ? "Pause" : "Play";
@@ -365,10 +458,12 @@ svg text { font-family: inherit; fill: var(--ink); }
       if (last != null) {
         const dt = Math.min(0.1, (ts - last) / 1000);
         if (t < 24) {
+          const prev = t;
           t = Math.min(24, t + dt * CFG.hoursPerSec);
+          PANELS.forEach(p => p.flashes.forEach(f => { if (prev < f.t && f.t <= t) wash(p, f.type); }));
         } else {
           holding += dt;
-          if (holding >= CFG.holdSec) { t = 0; holding = 0; }
+          if (holding >= CFG.holdSec) { t = 0; holding = 0; PANELS.forEach(p => simulate(p)); }
         }
         drawAll();
       }
@@ -379,7 +474,7 @@ svg text { font-family: inherit; fill: var(--ink); }
 
   playBtn.addEventListener("click", () => setPlaying(!playing));
   document.getElementById("restartBtn").addEventListener("click", () => {
-    t = 0; holding = 0; drawAll(); setPlaying(true);
+    t = 0; holding = 0; PANELS.forEach(p => simulate(p)); drawAll(); setPlaying(true);
   });
   document.addEventListener("keydown", e => {
     if (e.code === "Space" && e.target === document.body) { e.preventDefault(); setPlaying(!playing); }
